@@ -58,7 +58,23 @@ def get_sent_tensor(sent_id):
     sent = sent.t()
     sent = sent.to(device)
     return sent
+    
 
+def zero_padding(sents, max_len, fillvalue=0):
+    padded_sents = []
+    sents_length = []
+    for sent in sents:
+        sents_length.append(len(sent))
+        if len(sent)<max_len:
+            sent+=[fillvalue]*(max_len-len(sent))
+        padded_sents.append(sent)
+    padded_sents = torch.LongTensor(padded_sents)  # (batch_size, max_len)
+    padded_sents = padded_sents.t()                # (max_len, batch_size)
+    padded_sents = padded_sents.unsqueeze(1)       # (max_len, 1, batch_size)
+    padded_sents = padded_sents.to(device)
+    sents_length = torch.LongTensor(sents_length)
+    sents_length = sents_length.to(device)         # (batch_size) 
+    return padded_sents, sents_length
 
 
 class SimpleRNN(nn.Module):
@@ -106,7 +122,7 @@ def train(input_variables, loss_fun, rnn, rnn_optimizer, clip):
         token_loss = loss_fun(rnn.embedding(topi), rnn.embedding(input_variables[t+1]))  
         loss += token_loss
         num_tokens += 1
-        pred_sent.append(output.detach().numpy()) # shape=(seq_len, vocab_size)
+        pred_sent.append(output.cpu().detach().numpy()) # shape=(seq_len, vocab_size)
     
     # perform backpropagation
     loss.backward()
@@ -179,8 +195,8 @@ def predict(rnn, vocab_dict):
         for t in range(input_variables.size()[0]-1):
             output, hidden_state = rnn(input_variables[t], hidden_state)
             prob = torch.log(torch.gather(output, 0, input_variables[t+1]))
-            prob = prob.detach().numpy()[0]
-            word_idx = input_variables[t+1].numpy()[0]
+            prob = prob.cpu().detach().numpy()[0]
+            word_idx = input_variables[t+1].cpu().numpy()[0]
             pred_sent += new_dict[word_idx]+'\t'+str(prob)+' '
         outs.append(pred_sent)
     return outs
@@ -201,7 +217,7 @@ def validation(rnn, vocab_dict):
         # forward batch of tokens through rnn one time step at a time
         for t in range(input_variables.size()[0]-1):
             output, hidden_state = rnn(input_variables[t], hidden_state)
-            pred_sent.append(output.detach().numpy())    # shape=(seq_len, vocab_size)
+            pred_sent.append(output.cpu().detach().numpy())    # shape=(seq_len, vocab_size)
         pred_sents.append(pred_sent)            # shape=(total_num, seq_len, vocab_size)
     p = perplexity(pred_sents, sents_id)
     print('Dev Perplexity:',p)
