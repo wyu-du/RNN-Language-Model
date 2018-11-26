@@ -17,7 +17,7 @@ device = torch.device("cuda" if USE_CUDA else "cpu")
 
 def load_data(file_path):
     with open(file_path, 'r', encoding='utf8') as f:
-        lines = f.readlines()
+        lines = f.read().strip().split('\n')
     print('Read {!s} sentences.'.format(len(lines)))
     words = []    
     max_len = 0
@@ -51,23 +51,14 @@ def get_sent_id(file_path, vocab_dict):
                 sent.append(vocab_dict['<unk>'])
         sents.append(sent)
     return sents
-    
 
-def zero_padding(sents, max_len, fillvalue=0):
-    padded_sents = []
-    sents_length = []
-    for sent in sents:
-        sents_length.append(len(sent))
-        if len(sent)<max_len:
-            sent+=[fillvalue]*(max_len-len(sent))
-        padded_sents.append(sent)
-    padded_sents = torch.LongTensor(padded_sents)  # (batch_size, max_len)
-    padded_sents = padded_sents.t()                # (max_len, batch_size)
-    padded_sents = padded_sents.unsqueeze(1)       # (max_len, 1, batch_size)
-    padded_sents = padded_sents.to(device)
-    sents_length = torch.LongTensor(sents_length)
-    sents_length = sents_length.to(device)         # (batch_size) 
-    return padded_sents, sents_length
+
+def get_sent_tensor(sent_id):
+    sent = torch.LongTensor([sent_id])
+    sent = sent.t()
+    sent = sent.to(device)
+    return sent
+
 
 
 class SimpleRNN(nn.Module):
@@ -81,46 +72,41 @@ class SimpleRNN(nn.Module):
         
     def forward(self, input_token, hidden_state):
         '''
-        input_token: (1, batch_size)
-        hidden_state: (num_layers*num_directions, batch_size, hidden_size)
+        input_token: (1, 1)
+        hidden_state: (num_layers*num_directions, 1, hidden_size)
         '''
-        embedded = self.embedding(input_token)     # (1, batch_size, hidden_size)
-        # hidden_state: (1, batch_size, hidden_size)
-        # output: (1, batch_size, hidden_size)
+        embedded = self.embedding(input_token)     # (1, hidden_size)
+        embedded = embedded.unsqueeze(0)
+        # hidden_state: (1, 1, hidden_size)
+        # output: (1, 1, hidden_size)
         output, hidden = self.lstm(embedded, hidden_state) 
-        out = self.decode(hidden[0]+hidden[1])     # (1, batch_size, vocab_size)
+        out = self.decode(hidden[0]+hidden[1])     # (1, 1, vocab_size)
         out = out.squeeze(0)
-        out = nn.functional.softmax(out, dim=1)    # (batch_size, vocab_size)
+        out = nn.functional.softmax(out, dim=1)    # (1, vocab_size)
         return out, hidden
 
 
-def train(input_variables, lengths, loss_fun, rnn, rnn_optimizer, max_len, batch_size, clip):
+def train(input_variables, loss_fun, rnn, rnn_optimizer, clip):
     rnn_optimizer.zero_grad()
     
     input_variables = input_variables.to(device)
     
     # create initial hidden_state
-    hidden_state = (torch.zeros(1, batch_size, rnn.hidden_size).to(device), 
-                    torch.zeros(1, batch_size, rnn.hidden_size).to(device))
+    hidden_state = (torch.zeros(1, 1, rnn.hidden_size).to(device), 
+                    torch.zeros(1, 1, rnn.hidden_size).to(device))
     
     loss = 0.
     num_tokens = 0.
     pred_sent = []
     
     # forward batch of tokens through rnn one time step at a time
-    for t in range(max(lengths)-1):
+    for t in range(input_variables.size()[0]-1):
         output, hidden_state = rnn(input_variables[t], hidden_state)
-        _, topi = output.topk(1)
-        token_loss = loss_fun(rnn.embedding(topi.view(1, -1)), rnn.embedding(input_variables[t+1]))  
+        topi = output.argmax(dim=1)
+        token_loss = loss_fun(rnn.embedding(topi), rnn.embedding(input_variables[t+1]))  
         loss += token_loss
         num_tokens += 1
-        pred_sent.append(output)
-    pad_len = max_len - len(pred_sent)
-    paddings = torch.zeros(pad_len, batch_size, len(vocab_dict.keys()))
-    paddings = paddings.to(device)
-    preds = torch.stack(pred_sent)          # shape=(seq_len, batch_size, vocab_size)
-    preds = torch.cat((preds, paddings), 0) # shape=(max_len, batch_size, vocab_size)
-    preds = preds.to(device)
+        pred_sent.append(output.detach().numpy()) # shape=(seq_len, vocab_size)
     
     # perform backpropagation
     loss.backward()
@@ -131,10 +117,10 @@ def train(input_variables, lengths, loss_fun, rnn, rnn_optimizer, max_len, batch
     # adjust model weights
     rnn_optimizer.step()
     
-    return loss/num_tokens, preds
+    return loss/num_tokens, pred_sent
 
 
-def train_iters(iters, vocab_dict, batch_size, hidden_size, lr, norm_clipping, max_len):
+def train_iters(iters, vocab_dict, batch_size, hidden_size, lr, norm_clipping):
     # load data
     sents_id = get_sent_id('trn-wiki.txt', vocab_dict)
     
@@ -151,21 +137,12 @@ def train_iters(iters, vocab_dict, batch_size, hidden_size, lr, norm_clipping, m
     for k in range(iters):
         avg_loss = 0.
         pred_sents = []
-        for i in range(len(sents_id)//batch_size-1):
-            sents_id_batch = sents_id[i*batch_size:(i+1)*batch_size]
-            input_variables, lengths = zero_padding(sents_id_batch, max_len)
-            loss, pred_sent = train(input_variables, lengths, loss_fun, rnn, rnn_optimizer, 
-                                    max_len, batch_size, norm_clipping)
-            pred_sents.append(pred_sent.transpose(0, 1))
+        for i in range(len(sents_id)):
+            input_variables = get_sent_tensor(sents_id[i])
+            loss, pred_sent = train(input_variables, loss_fun, rnn, rnn_optimizer, norm_clipping)
+            pred_sents.append(pred_sent)    # shape=(total_num, seq_len, vocab_size)
             avg_loss += loss
-        pred_sents = torch.stack(pred_sents)
-        pred_sents = pred_sents.squeeze(1)
-        pred_sents = pred_sents.to(device)
-        sents_id_padded, total_lengths = zero_padding(sents_id, max_len)
-        sents_id_padded = sents_id_padded.squeeze(1)
-        sents_id_padded = sents_id_padded.t()
-        p = perplexity(pred_sents, sents_id_padded, total_lengths)
-        p = p.detach().numpy()
+        p = perplexity(pred_sents, sents_id)
         
         # Save checkpoint
         if i % 10 == 0:
@@ -185,64 +162,48 @@ def train_iters(iters, vocab_dict, batch_size, hidden_size, lr, norm_clipping, m
     return rnn
 
 
-def predict(rnn, max_len, vocab_dict):
+def predict(rnn, vocab_dict):
     rnn.eval()
     
     # load data
     sents_id = get_sent_id('tst-wiki.txt', vocab_dict)
     outs = []
     new_dict = {v : k for k, v in vocab_dict.items()}
-    for i in range(len(sents_id)-1):
-        sents_id_batch = [sents_id[i]]
-        input_variables, lengths = zero_padding(sents_id_batch, max_len)
+    for i in range(len(sents_id)):
+        input_variables = get_sent_tensor(sents_id[i])
         # create initial hidden_state
         hidden_state = (torch.zeros(1, 1, rnn.hidden_size).to(device), 
                         torch.zeros(1, 1, rnn.hidden_size).to(device))
         pred_sent = ''
         # forward batch of tokens through rnn one time step at a time
-        for t in range(max(lengths)-1):
+        for t in range(input_variables.size()[0]-1):
             output, hidden_state = rnn(input_variables[t], hidden_state)
-            prob = torch.log(torch.gather(output, 1, input_variables[t+1]))
-            prob = prob.detach().numpy()[0,0]
-            word_idx = input_variables[t+1].numpy()[0,0]
+            prob = torch.log(torch.gather(output, 0, input_variables[t+1]))
+            prob = prob.detach().numpy()[0]
+            word_idx = input_variables[t+1].numpy()[0]
             pred_sent += new_dict[word_idx]+'\t'+str(prob)+' '
         outs.append(pred_sent)
     return outs
 
 
-def validation(rnn, max_len, vocab_dict):
+def validation(rnn, vocab_dict):
     rnn.eval()
     
     # load data
     sents_id = get_sent_id('tst-wiki.txt', vocab_dict)
     pred_sents = []
-    for i in range(len(sents_id)-1):
-        sents_id_batch = [sents_id[i]]
-        input_variables, lengths = zero_padding(sents_id_batch, max_len)
+    for i in range(len(sents_id)):
+        input_variables = get_sent_tensor(sents_id[i])
         # create initial hidden_state
         hidden_state = (torch.zeros(1, 1, rnn.hidden_size).to(device), 
                         torch.zeros(1, 1, rnn.hidden_size).to(device))
         pred_sent = []
         # forward batch of tokens through rnn one time step at a time
-        for t in range(max(lengths)-1):
+        for t in range(input_variables.size()[0]-1):
             output, hidden_state = rnn(input_variables[t], hidden_state)
-            pred_sent.append(output)
-        pad_len = max_len - len(pred_sent)
-        paddings = torch.zeros(pad_len, batch_size, len(vocab_dict.keys()))
-        paddings = paddings.to(device)
-        preds = torch.stack(pred_sent)          # shape=(seq_len, 1, vocab_size)
-        preds = torch.cat((preds, paddings), 0) # shape=(max_len, 1, vocab_size)
-        preds = preds.squeeze(1)                # shape=(max_len, vocab_size)
-        preds = preds.to(device)
-        pred_sents.append(preds)
-    pred_sents = torch.stack(pred_sents)        # shape=(total_num, max_len, vocab_size)
-    pred_sents = pred_sents.to(device)
-    sents_id_padded, total_lengths = zero_padding(sents_id, max_len)
-    sents_id_padded = sents_id_padded.squeeze(1)
-    sents_id_padded = sents_id_padded.t()       # shape=(total_num, max_len)
-    total_lengths = total_lengths.squeeze(1)
-    p = perplexity(pred_sents, sents_id_padded, total_lengths)
-    p = p.detach().numpy()
+            pred_sent.append(output.detach().numpy())    # shape=(seq_len, vocab_size)
+        pred_sents.append(pred_sent)            # shape=(total_num, seq_len, vocab_size)
+    p = perplexity(pred_sents, sents_id)
     print('Dev Perplexity:',p)
 
 
@@ -256,9 +217,9 @@ if __name__=='__main__':
     trn_words, max_len = load_data('trn-wiki.txt')
     vocab_dict = build_vocab(trn_words, vocab_dict)
     
-    rnn = train_iters(1, vocab_dict, batch_size, hidden_size, lr, norm_clipping, max_len)
-    validation(rnn, max_len, vocab_dict)
-    outs = predict(rnn, max_len, vocab_dict)
+    rnn = train_iters(1, vocab_dict, batch_size, hidden_size, lr, norm_clipping)
+    validation(rnn, vocab_dict)
+    outs = predict(rnn, vocab_dict)
     with open('wd5jq-tst-logprob.txt', 'w', encoding='utf8') as f:
         for line in outs:
             f.write(line+'\n')
