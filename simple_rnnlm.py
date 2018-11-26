@@ -100,8 +100,8 @@ def train(input_variables, lengths, loss_fun, rnn, rnn_optimizer, max_len, batch
     input_variables = input_variables.to(device)
     
     # create initial hidden_state
-    hidden_state = (torch.zeros(1, batch_size, rnn.hidden_size), 
-                    torch.zeros(1, batch_size, rnn.hidden_size))
+    hidden_state = (torch.zeros(1, batch_size, rnn.hidden_size).to(device), 
+                    torch.zeros(1, batch_size, rnn.hidden_size).to(device))
     
     loss = 0.
     num_tokens = 0.
@@ -119,6 +119,7 @@ def train(input_variables, lengths, loss_fun, rnn, rnn_optimizer, max_len, batch
     paddings = torch.zeros(pad_len, batch_size, len(vocab_dict.keys()))
     preds = torch.stack(pred_sent)          # shape=(seq_len, batch_size, vocab_size)
     preds = torch.cat((preds, paddings), 0) # shape=(max_len, batch_size, vocab_size)
+    preds = preds.to(device)
     
     # perform backpropagation
     loss.backward()
