@@ -149,20 +149,17 @@ def train_iters(iters, vocab_dict, batch_size, hidden_size, lr, norm_clipping, m
     for k in range(iters):
         avg_loss = 0.
         pred_sents = []
-        total_lengths = []
         for i in range(len(sents_id)//batch_size-1):
             sents_id_batch = sents_id[i*batch_size:(i+1)*batch_size]
             input_variables, lengths = zero_padding(sents_id_batch, max_len)
             loss, pred_sent = train(input_variables, lengths, loss_fun, rnn, rnn_optimizer, 
                                     max_len, batch_size, norm_clipping)
             pred_sents.append(pred_sent.transpose(0, 1))
-            total_lengths.append(lengths)
             avg_loss += loss
         pred_sents = torch.stack(pred_sents)
         pred_sents = pred_sents.squeeze(1)
-        total_lengths = torch.stack(total_lengths)
-        total_lengths = total_lengths.squeeze(1)
-        sents_id_padded, lengths = zero_padding(sents_id, max_len)
+        pred_sents = pred_sents.to(device)
+        sents_id_padded, total_lengths = zero_padding(sents_id, max_len)
         sents_id_padded = sents_id_padded.squeeze(1)
         sents_id_padded = sents_id_padded.t()
         p = perplexity(pred_sents, sents_id_padded, total_lengths)
@@ -197,8 +194,8 @@ def predict(rnn, max_len, vocab_dict):
         sents_id_batch = [sents_id[i]]
         input_variables, lengths = zero_padding(sents_id_batch, max_len)
         # create initial hidden_state
-        hidden_state = (torch.zeros(1, 1, rnn.hidden_size), 
-                        torch.zeros(1, 1, rnn.hidden_size))
+        hidden_state = (torch.zeros(1, 1, rnn.hidden_size).to(device), 
+                        torch.zeros(1, 1, rnn.hidden_size).to(device))
         pred_sent = ''
         # forward batch of tokens through rnn one time step at a time
         for t in range(max(lengths)-1):
@@ -221,8 +218,8 @@ def validation(rnn, max_len, vocab_dict):
         sents_id_batch = [sents_id[i]]
         input_variables, lengths = zero_padding(sents_id_batch, max_len)
         # create initial hidden_state
-        hidden_state = (torch.zeros(1, 1, rnn.hidden_size), 
-                        torch.zeros(1, 1, rnn.hidden_size))
+        hidden_state = (torch.zeros(1, 1, rnn.hidden_size).to(device), 
+                        torch.zeros(1, 1, rnn.hidden_size).to(device))
         pred_sent = []
         # forward batch of tokens through rnn one time step at a time
         for t in range(max(lengths)-1):
@@ -233,8 +230,10 @@ def validation(rnn, max_len, vocab_dict):
         preds = torch.stack(pred_sent)          # shape=(seq_len, 1, vocab_size)
         preds = torch.cat((preds, paddings), 0) # shape=(max_len, 1, vocab_size)
         preds = preds.squeeze(1)                # shape=(max_len, vocab_size)
+        preds = preds.to(device)
         pred_sents.append(preds)
     pred_sents = torch.stack(pred_sents)        # shape=(total_num, max_len, vocab_size)
+    pred_sents = pred_sents.to(device)
     sents_id_padded, total_lengths = zero_padding(sents_id, max_len)
     sents_id_padded = sents_id_padded.squeeze(1)
     sents_id_padded = sents_id_padded.t()       # shape=(total_num, max_len)
