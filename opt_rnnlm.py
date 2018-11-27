@@ -148,19 +148,18 @@ def train_iters(iters, vocab_dict, hidden_size, lr, norm_clipping, optimizer):
         idx = np.random.randint(len(sents_id))
         input_variables = get_sent_tensor(sents_id[idx])
         loss = train(input_variables, loss_fun, rnn, rnn_optimizer, norm_clipping)
-
-        # Save checkpoint
-        if (k+1) % 1000 == 0:
-            directory = 'checkpoints'
-            if not os.path.exists(directory):
-                os.makedirs(directory)
-    
-            torch.save({
-                'rnn': rnn.state_dict(),
-                'vocab_dict': vocab_dict,
-            }, os.path.join(directory, '{}_{}.tar'.format((k+1), 'checkpoint_opt')))
-    
         print("Iteration: {}; Average loss: {:.4f}".format(k, loss))
+        
+    # Save checkpoint
+    directory = 'checkpoints'
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+    torch.save({
+        'rnn': rnn.state_dict(),
+        'vocab_dict': vocab_dict,
+    }, os.path.join(directory, '{}_{}.tar'.format(iters, 'checkpoint_opt')))
+        
     return rnn
 
 
