@@ -77,8 +77,9 @@ def compute_perplexity(corpus_name):
         n_total += len(tokens)
         sent_p = 0.
         for i in range(1, len(tokens)):
-            p = tokens[i].split('\t')
-            sent_p += float(p)
+            if len(tokens[i].split('\t'))==2:
+                p = tokens[i].split('\t')[1]
+                sent_p += float(p)
         p_total += sent_p
     avg = p_total/n_total
     out = np.exp(-avg)
@@ -117,7 +118,7 @@ if __name__=='__main__':
     get_tst_logprob('dev-wiki.txt', 'dev-logprob.txt', rnn, vocab_dict)
     train_perplexity = compute_perplexity('trn-logprob.txt')
     print('Perplexity on training set:',train_perplexity)
-    dev_perplexity = get_perplexity_number('dev-logprob.txt')
+    dev_perplexity = compute_perplexity('dev-logprob.txt')
     print('Perplexity on development set:',dev_perplexity)
     
     get_tst_logprob('tst-wiki.txt', 'wd5jq-tst-logprob.txt', rnn, vocab_dict)
