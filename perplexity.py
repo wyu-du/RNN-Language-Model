@@ -8,7 +8,7 @@ Created on Sun Nov 25 11:23:11 2018
 import torch
 import numpy as np
 import os
-from stackedlstm_rnnlm import StackedRNN, get_sent_id, get_sent_tensor
+from simple_rnnlm import SimpleRNN, get_sent_id, get_sent_tensor
 import argparse
 
 
@@ -39,7 +39,7 @@ def load_model(checkpoint_name, hidden_size):
     
     # build model
     vocab_size = len(vocab_dict.keys())
-    rnn = StackedRNN(vocab_size, hidden_size, 2)
+    rnn = SimpleRNN(vocab_size, hidden_size)
     rnn.load_state_dict(rnn_sd)
     rnn = rnn.to(device)
     
@@ -135,7 +135,7 @@ def get_tst_logprob(file_name, output_fname, rnn, vocab_dict):
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--name', default='10000_checkpoint_opt')
+    parser.add_argument('--name', default='10000_checkpoint_model')
     args = parser.parse_args()
     
     rnn, vocab_dict = load_model(args.name, 32)

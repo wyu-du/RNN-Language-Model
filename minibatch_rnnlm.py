@@ -173,4 +173,4 @@ if __name__=='__main__':
     trn_words, max_len = load_data('trn-wiki.txt')
     vocab_dict = build_vocab(trn_words, vocab_dict)
     
-    rnn = train_iters(args.iters, args.mini_batch, vocab_dict, hidden_size, lr, norm_clipping)
+    rnn = train_iters(args.iters, int(args.mini_batch), vocab_dict, hidden_size, lr, norm_clipping)
