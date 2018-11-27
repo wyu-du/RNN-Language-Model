@@ -9,6 +9,7 @@ import torch
 import numpy as np
 import os
 from stackedlstm_rnnlm import StackedRNN, get_sent_id, get_sent_tensor
+import argparse
 
 
 USE_CUDA = torch.cuda.is_available()
@@ -133,12 +134,16 @@ def get_tst_logprob(file_name, output_fname, rnn, vocab_dict):
 
 
 if __name__=='__main__':
-    rnn, vocab_dict = load_model('10000_checkpoint_stack_2', 32)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--name', default='10000_checkpoint_opt')
+    args = parser.parse_args()
     
-    get_logprob('trn-wiki.txt', 'trn-logprob-stack2.txt', rnn, vocab_dict)
-    get_logprob('dev-wiki.txt', 'dev-logprob-stack2.txt', rnn, vocab_dict)
-    train_perplexity = compute_perplexity('trn-logprob-stack2.txt')
+    rnn, vocab_dict = load_model(args.name, 32)
+    
+    get_logprob('trn-wiki.txt', 'trn-logprob.txt', rnn, vocab_dict)
+    get_logprob('dev-wiki.txt', 'dev-logprob.txt', rnn, vocab_dict)
+    train_perplexity = compute_perplexity('trn-logprob.txt')
     print('Perplexity on training set:',train_perplexity)
-    dev_perplexity = compute_perplexity('dev-logprob-stack2.txt')
+    dev_perplexity = compute_perplexity('dev-logprob.txt')
     print('Perplexity on development set:',dev_perplexity)
     
