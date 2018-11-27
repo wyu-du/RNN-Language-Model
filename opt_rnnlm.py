@@ -75,14 +75,14 @@ class SimpleRNN(nn.Module):
         input_token: (1, 1)
         hidden_state: (2, 1, hidden_size)
         '''
-        embedded = self.embedding(input_token)        # (1, hidden_size)
+        embedded = self.embedding(input_token)         # (1, hidden_size)
         embedded = embedded.unsqueeze(0)
         # hidden_state: (2, 1, hidden_size)
         # output: (1, 1, hidden_size)
         output, hidden = self.lstm(embedded, hidden_state) 
-        out = self.decode(hidden[0])            # (1, 1, vocab_size)
+        out = self.decode(hidden[0])                   # (1, 1, vocab_size)
         out = out.squeeze(0)
-        out = nn.functional.log_softmax(out, dim=1)   # (1, vocab_size)
+        out = nn.functional.log_softmax(out, dim=1)    # (1, vocab_size)
         return out, hidden
 
 
@@ -119,7 +119,7 @@ def train(input_variables, loss_fun, rnn, rnn_optimizer, clip):
     return sum(printed_loss)/num_tokens
 
 
-def train_iters(iters, vocab_dict, hidden_size, lr, norm_clipping):
+def train_iters(iters, vocab_dict, hidden_size, lr, norm_clipping, optimizer):
     # load data
     sents_id = get_sent_id('trn-wiki.txt', vocab_dict)
     
@@ -129,7 +129,17 @@ def train_iters(iters, vocab_dict, hidden_size, lr, norm_clipping):
     rnn.train()
     
     # initialize optimizer
-    rnn_optimizer = torch.optim.SGD(rnn.parameters(), lr=lr)
+    if optimizer == 'Adagrad':
+        rnn_optimizer = torch.optim.Adagrad(rnn.parameters(), lr=lr)
+    elif optimizer == 'Adam':
+        rnn_optimizer = torch.optim.Adam(rnn.parameters(), lr=lr)
+    elif optimizer == 'RMSprop':
+        rnn_optimizer = torch.optim.RMSprop(rnn.parameters(), lr=lr)
+    elif optimizer == 'SGD_momentum':
+        rnn_optimizer = torch.optim.SGD(rnn.parameters(), lr=lr, momentum=0.5)
+    else:
+        rnn_optimizer = torch.optim.SGD(rnn.parameters(), lr=lr)
+    
     # initialize loss function
     loss_fun = nn.NLLLoss()
     
@@ -138,7 +148,7 @@ def train_iters(iters, vocab_dict, hidden_size, lr, norm_clipping):
         idx = np.random.randint(len(sents_id))
         input_variables = get_sent_tensor(sents_id[idx])
         loss = train(input_variables, loss_fun, rnn, rnn_optimizer, norm_clipping)
-        
+
         # Save checkpoint
         if (k+1) % 1000 == 0:
             directory = 'checkpoints'
@@ -148,7 +158,7 @@ def train_iters(iters, vocab_dict, hidden_size, lr, norm_clipping):
             torch.save({
                 'rnn': rnn.state_dict(),
                 'vocab_dict': vocab_dict,
-            }, os.path.join(directory, '{}_{}.tar'.format((k+1), 'checkpoint_simple')))
+            }, os.path.join(directory, '{}_{}.tar'.format((k+1), 'checkpoint_opt')))
     
         print("Iteration: {}; Average loss: {:.4f}".format(k, loss))
     return rnn
@@ -158,6 +168,7 @@ def train_iters(iters, vocab_dict, hidden_size, lr, norm_clipping):
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--iters', default=10000)
+    parser.add_argument('--optimizer', default='SGD')
     args = parser.parse_args()
     
     vocab_dict = {'<unk>':0, '<num>':1, '<start>':2, '<stop>':3}
@@ -168,4 +179,4 @@ if __name__=='__main__':
     trn_words, max_len = load_data('trn-wiki.txt')
     vocab_dict = build_vocab(trn_words, vocab_dict)
     
-    rnn = train_iters(args.iters, vocab_dict, hidden_size, lr, norm_clipping)
+    rnn = train_iters(args.iters, vocab_dict, hidden_size, lr, norm_clipping, args.optimizer)

@@ -61,39 +61,40 @@ def get_sent_tensor(sent_id):
     return sent
     
 
-class SimpleRNN(nn.Module):
-    def __init__(self, vocab_size, hidden_size):
-        super(SimpleRNN, self).__init__()
+class StackedRNN(nn.Module):
+    def __init__(self, vocab_size, hidden_size, num_layers):
+        super(StackedRNN, self).__init__()
         self.hidden_size = hidden_size
         self.vocab_size = vocab_size
         self.embedding = nn.Embedding(vocab_size, hidden_size)
-        self.lstm = nn.LSTM(hidden_size, hidden_size, num_layers=1, bidirectional=False)
+        self.lstm = nn.LSTM(hidden_size, hidden_size, num_layers=num_layers, bidirectional=False)
         self.decode = nn.Linear(hidden_size, vocab_size)
         
     def forward(self, input_token, hidden_state):
         '''
         input_token: (1, 1)
-        hidden_state: (2, 1, hidden_size)
+        hidden_state: (2*num_layers, 1, hidden_size)
         '''
-        embedded = self.embedding(input_token)        # (1, hidden_size)
+        embedded = self.embedding(input_token)     # (1, hidden_size)
         embedded = embedded.unsqueeze(0)
-        # hidden_state: (2, 1, hidden_size)
+        # hidden_state: (2*num_layers, 1, hidden_size)
         # output: (1, 1, hidden_size)
         output, hidden = self.lstm(embedded, hidden_state) 
-        out = self.decode(hidden[0])            # (1, 1, vocab_size)
-        out = out.squeeze(0)
-        out = nn.functional.log_softmax(out, dim=1)   # (1, vocab_size)
-        return out, hidden
+        out = self.decode(hidden[0])               # (num_layers, 1, vocab_size)
+        out_last = out[num_layers-1, :, :]         # (1, 1, vocab_size)
+        out_last = out_last.squeeze(0)             # (1, vocab_size)
+        out_last = nn.functional.log_softmax(out_last, dim=1)    # (1, vocab_size)
+        return out_last, hidden
 
 
-def train(input_variables, loss_fun, rnn, rnn_optimizer, clip):
+def train(input_variables, loss_fun, rnn, rnn_optimizer, clip, num_layers):
     rnn_optimizer.zero_grad()
     
     input_variables = input_variables.to(device)
     
     # create initial hidden_state
-    hidden_state = (torch.zeros(1, 1, rnn.hidden_size).to(device),  # h_0
-                    torch.zeros(1, 1, rnn.hidden_size).to(device))  # c_0
+    hidden_state = (torch.zeros(num_layers, 1, rnn.hidden_size).to(device),  # h_0
+                    torch.zeros(num_layers, 1, rnn.hidden_size).to(device))  # c_0
     
     loss = 0.
     printed_loss = []
@@ -119,12 +120,12 @@ def train(input_variables, loss_fun, rnn, rnn_optimizer, clip):
     return sum(printed_loss)/num_tokens
 
 
-def train_iters(iters, vocab_dict, hidden_size, lr, norm_clipping):
+def train_iters(iters, vocab_dict, hidden_size, num_layers, lr, norm_clipping):
     # load data
     sents_id = get_sent_id('trn-wiki.txt', vocab_dict)
     
     # build model
-    rnn = SimpleRNN(vocab_size=len(vocab_dict.keys()), hidden_size=hidden_size)
+    rnn = StackedRNN(len(vocab_dict.keys()), hidden_size, num_layers)
     rnn.to(device)
     rnn.train()
     
@@ -137,7 +138,7 @@ def train_iters(iters, vocab_dict, hidden_size, lr, norm_clipping):
     for k in range(iters):
         idx = np.random.randint(len(sents_id))
         input_variables = get_sent_tensor(sents_id[idx])
-        loss = train(input_variables, loss_fun, rnn, rnn_optimizer, norm_clipping)
+        loss = train(input_variables, loss_fun, rnn, rnn_optimizer, norm_clipping, num_layers)
         
         # Save checkpoint
         if (k+1) % 1000 == 0:
@@ -148,7 +149,7 @@ def train_iters(iters, vocab_dict, hidden_size, lr, norm_clipping):
             torch.save({
                 'rnn': rnn.state_dict(),
                 'vocab_dict': vocab_dict,
-            }, os.path.join(directory, '{}_{}.tar'.format((k+1), 'checkpoint_simple')))
+            }, os.path.join(directory, '{}_{}.tar'.format((k+1), 'checkpoint_stack')))
     
         print("Iteration: {}; Average loss: {:.4f}".format(k, loss))
     return rnn
@@ -158,6 +159,7 @@ def train_iters(iters, vocab_dict, hidden_size, lr, norm_clipping):
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--iters', default=10000)
+    parser.add_argument('--num_layers', default=2)
     args = parser.parse_args()
     
     vocab_dict = {'<unk>':0, '<num>':1, '<start>':2, '<stop>':3}
@@ -168,4 +170,4 @@ if __name__=='__main__':
     trn_words, max_len = load_data('trn-wiki.txt')
     vocab_dict = build_vocab(trn_words, vocab_dict)
     
-    rnn = train_iters(args.iters, vocab_dict, hidden_size, lr, norm_clipping)
+    rnn = train_iters(args.iters, vocab_dict, hidden_size, args.num_layers, lr, norm_clipping)

@@ -75,14 +75,14 @@ class SimpleRNN(nn.Module):
         input_token: (1, 1)
         hidden_state: (2, 1, hidden_size)
         '''
-        embedded = self.embedding(input_token)        # (1, hidden_size)
+        embedded = self.embedding(input_token)         # (1, hidden_size)
         embedded = embedded.unsqueeze(0)
         # hidden_state: (2, 1, hidden_size)
         # output: (1, 1, hidden_size)
         output, hidden = self.lstm(embedded, hidden_state) 
-        out = self.decode(hidden[0])            # (1, 1, vocab_size)
+        out = self.decode(hidden[0])             # (1, 1, vocab_size)
         out = out.squeeze(0)
-        out = nn.functional.log_softmax(out, dim=1)   # (1, vocab_size)
+        out = nn.functional.log_softmax(out, dim=1)    # (1, vocab_size)
         return out, hidden
 
 
@@ -148,7 +148,7 @@ def train_iters(iters, vocab_dict, hidden_size, lr, norm_clipping):
             torch.save({
                 'rnn': rnn.state_dict(),
                 'vocab_dict': vocab_dict,
-            }, os.path.join(directory, '{}_{}.tar'.format((k+1), 'checkpoint_simple')))
+            }, os.path.join(directory, '{}_{}.tar'.format(k, 'checkpoint_model')))
     
         print("Iteration: {}; Average loss: {:.4f}".format(k, loss))
     return rnn
@@ -158,14 +158,14 @@ def train_iters(iters, vocab_dict, hidden_size, lr, norm_clipping):
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--iters', default=10000)
+    parser.add_argument('--hidden_size', default=32)
     args = parser.parse_args()
     
     vocab_dict = {'<unk>':0, '<num>':1, '<start>':2, '<stop>':3}
-    hidden_size = 32
     lr = 0.001
     norm_clipping = 10
     
     trn_words, max_len = load_data('trn-wiki.txt')
     vocab_dict = build_vocab(trn_words, vocab_dict)
     
-    rnn = train_iters(args.iters, vocab_dict, hidden_size, lr, norm_clipping)
+    rnn = train_iters(args.iters, vocab_dict, args.hidden_size, lr, norm_clipping)
