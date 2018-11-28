@@ -164,7 +164,7 @@ if __name__=='__main__':
     lr = 0.001
     norm_clipping = 10
     
-    trn_words, max_len = load_data('trn-wiki.txt')
+    trn_words, max_len = load_data('data/trn-wiki.txt')
     vocab_dict = build_vocab(trn_words, vocab_dict)
     
-    rnn = train_iters(args.iters, vocab_dict, int(args.hidden_size), lr, norm_clipping)
+    rnn = train_iters(int(args.iters), vocab_dict, int(args.hidden_size), lr, norm_clipping)
