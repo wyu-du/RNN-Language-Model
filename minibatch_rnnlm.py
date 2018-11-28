@@ -56,12 +56,12 @@ def get_sent_id(file_path, vocab_dict):
 
 
 def get_sent_tensor(sents_id, mini_batch):
+    sents_batch = []
     batch_idx = np.random.randint(low=0, high=len(sents_id), size=mini_batch)
-    sents_batch = sents_id[batch_idx]
+    for idx in batch_idx:
+        sents_batch.append(sents_id[idx])
     sents_batch = list(itertools.zip_longest(*sents_batch, fillvalue=0))
-    sent = torch.LongTensor(sents_id)
-    sent = sent.t()   # shape=(max_len, batch_size)
-    print(sent.size()) 
+    sent = torch.LongTensor(sents_batch)       # shape=(max_len, batch_size)
     sent = sent.to(device)
     return sent
     
@@ -80,7 +80,8 @@ class SimpleRNN(nn.Module):
         input_token: (1, batch_size)
         hidden_state: (2, batch_size, hidden_size)
         '''
-        embedded = self.embedding(input_token)         # (1, batch_size, hidden_size)
+        embedded = self.embedding(input_token)         # (batch_size, hidden_size)
+        embedded = embedded.unsqueeze(0)               # (1, batch_size, hidden_size)
         # hidden_state: (2, batch_size, hidden_size)
         # output: (1, batch_size, hidden_size)
         output, hidden = self.lstm(embedded, hidden_state) 
@@ -142,7 +143,7 @@ def train_iters(iters, mini_batch, vocab_dict, hidden_size, lr, norm_clipping):
     # start training
     for k in range(iters):
         input_variables = get_sent_tensor(sents_id, mini_batch)
-        loss = train(input_variables, loss_fun, rnn, rnn_optimizer, norm_clipping)
+        loss = train(input_variables, mini_batch, loss_fun, rnn, rnn_optimizer, norm_clipping)
         print("Iteration: {}; Average loss: {:.4f}".format(k, loss))
         
     # Save checkpoint
@@ -162,7 +163,7 @@ def train_iters(iters, mini_batch, vocab_dict, hidden_size, lr, norm_clipping):
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--iters', default=10000)
-    parser.add_argument('--mini_batch', default=32)
+    parser.add_argument('--mini_batch', default=16)
     args = parser.parse_args()
     
     vocab_dict = {'<padding>':0, '<unk>':1, '<num>':2, '<start>':3, '<stop>':4}
