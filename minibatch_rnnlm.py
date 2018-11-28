@@ -153,8 +153,8 @@ def train_iters(iters, mini_batch, vocab_dict, hidden_size, lr, norm_clipping):
     torch.save({
         'rnn': rnn.state_dict(),
         'vocab_dict': vocab_dict,
-    }, os.path.join(directory, '{}_{}.tar'.format(iters, 'checkpoint_mini')))
-        
+    }, os.path.join(directory, '{}_{}.tar'.format((k+1), 'checkpoint_simple')))
+    
     return rnn
 
 
@@ -165,7 +165,7 @@ if __name__=='__main__':
     parser.add_argument('--mini_batch', default=32)
     args = parser.parse_args()
     
-    vocab_dict = {'<unk>':0, '<num>':1, '<start>':2, '<stop>':3}
+    vocab_dict = {'<padding>':0, '<unk>':1, '<num>':2, '<start>':3, '<stop>':4}
     hidden_size = 32
     lr = 0.001
     norm_clipping = 10
@@ -173,4 +173,4 @@ if __name__=='__main__':
     trn_words, max_len = load_data('trn-wiki.txt')
     vocab_dict = build_vocab(trn_words, vocab_dict)
     
-    rnn = train_iters(args.iters, int(args.mini_batch), vocab_dict, hidden_size, lr, norm_clipping)
+    rnn = train_iters(int(args.iters), int(args.mini_batch), vocab_dict, hidden_size, lr, norm_clipping)
