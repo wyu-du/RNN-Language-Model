@@ -44,14 +44,11 @@ def get_logprob(file_name, output_fname, rnn, vocab_dict):
         # create initial hidden_state
         hidden_state = (torch.zeros(1, 1, rnn.hidden_size).to(device), 
                         torch.zeros(1, 1, rnn.hidden_size).to(device))
-        pred_sent = ''
-        # forward batch of tokens through rnn one time step at a time
-        for t in range(input_variables.size()[0]-1):
-            output, hidden_state = rnn(input_variables[t], hidden_state)
-            prob = torch.gather(output, 1, input_variables[t+1].view(1,-1))
-            prob = prob.cpu().detach().numpy()[0]
-            pred_sent += str(prob[0])+'\t'
-        outs.write(pred_sent+'\n')
+        seq_len = input_variables.size()[0]
+        output, hidden_state = rnn(input_variables[:seq_len-1], hidden_state)
+        prob = torch.gather(output, 1, input_variables[1:seq_len])
+        prob = prob.cpu().detach().numpy()[:, 0]
+        outs.write('\t'.join(prob)+'\n')
     outs.close()
 
 
@@ -73,9 +70,32 @@ def compute_perplexity(corpus_name):
     return out
 
 
+def get_tst_logprob(file_name, output_fname, rnn, vocab_dict):
+    rnn.eval()
+    
+    # load data
+    sents_id = get_sent_id(file_name, vocab_dict)
+    
+    outs = open(output_fname, 'w', encoding='utf8')
+    new_dict = {v : k for k, v in vocab_dict.items()}
+    for i in range(len(sents_id)):
+        input_variables = get_sent_tensor(sents_id[i])
+        # create initial hidden_state
+        hidden_state = (torch.zeros(1, 1, rnn.hidden_size).to(device), 
+                        torch.zeros(1, 1, rnn.hidden_size).to(device))
+        seq_len = input_variables.size()[0]
+        output, hidden_state = rnn(input_variables[:seq_len-1], hidden_state)
+        prob = torch.gather(output, 1, input_variables[1:seq_len])
+        prob = prob.cpu().detach().numpy()[:, 0]
+        word_idx = input_variables[1:seq_len].squeeze(1).cpu().numpy()
+        for i in range(len(seq_len)):
+            outs.write(new_dict[word_idx[i]]+'\t'+str(prob[i])+'\n')
+    outs.close()
+
+
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--name', default='10000_checkpoint_model')
+    parser.add_argument('--name', default='10_checkpoint_simple')
     parser.add_argument('--hidden_size', default=32)
     args = parser.parse_args()
     
@@ -88,3 +108,4 @@ if __name__=='__main__':
     dev_perplexity = compute_perplexity('data/dev-logprob.txt')
     print('Perplexity on development set:',dev_perplexity)
     
+#    get_tst_logprob('data/tst-wiki.txt', 'wd5jq-tst-logprob.txt', rnn, vocab_dict)
