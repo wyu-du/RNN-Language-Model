@@ -8,7 +8,6 @@ Created on Sat Nov 24 10:40:16 2018
 import torch
 from torch import nn
 import os
-import numpy as np
 import argparse
 
 
@@ -113,7 +112,7 @@ def train(input_variables, loss_fun, rnn, rnn_optimizer, clip):
 
 def train_iters(iters, vocab_dict, hidden_size, lr, norm_clipping):
     # load data
-    sents_id = get_sent_id('trn-wiki.txt', vocab_dict)
+    sents_id = get_sent_id('data/trn-wiki.txt', vocab_dict)
     
     # build model
     rnn = SimpleRNN(vocab_size=len(vocab_dict.keys()), hidden_size=hidden_size)
