@@ -8,7 +8,7 @@ Created on Sun Nov 25 11:23:11 2018
 import torch
 import numpy as np
 import os
-from simple_rnnlm import SimpleRNN, get_sent_id, get_sent_tensor
+from stackedlstm_rnnlm import StackedRNN, get_sent_id, get_sent_tensor
 import argparse
 
 
@@ -16,7 +16,7 @@ USE_CUDA = torch.cuda.is_available()
 device = torch.device("cuda" if USE_CUDA else "cpu")
 
 
-def load_model(checkpoint_name, hidden_size):
+def load_model(checkpoint_name, hidden_size, num_layers):
     # load model weights from checkpoints
     load_filename = os.path.join('checkpoints', '{}.tar'.format(checkpoint_name))
     checkpoint = torch.load(load_filename, map_location='cpu')
@@ -25,14 +25,14 @@ def load_model(checkpoint_name, hidden_size):
     
     # build model
     vocab_size = len(vocab_dict.keys())
-    rnn = SimpleRNN(vocab_size, hidden_size)
+    rnn = StackedRNN(vocab_size, hidden_size, num_layers)
     rnn.load_state_dict(rnn_sd)
     rnn = rnn.to(device)
     
     return rnn, vocab_dict
     
 
-def get_logprob(file_name, output_fname, rnn, vocab_dict):
+def get_logprob(file_name, output_fname, rnn, vocab_dict, num_layers):
     rnn.eval()
     
     # load data
@@ -42,8 +42,8 @@ def get_logprob(file_name, output_fname, rnn, vocab_dict):
     for i in range(len(sents_id)):
         input_variables = get_sent_tensor(sents_id[i])
         # create initial hidden_state
-        hidden_state = (torch.zeros(1, 1, rnn.hidden_size).to(device), 
-                        torch.zeros(1, 1, rnn.hidden_size).to(device))
+        hidden_state = (torch.zeros(num_layers, 1, rnn.hidden_size).to(device), 
+                        torch.zeros(num_layers, 1, rnn.hidden_size).to(device))
         seq_len = input_variables.size()[0]
         output, hidden_state = rnn(input_variables[:seq_len-1], hidden_state)
         probs = torch.gather(output, 1, input_variables[1:seq_len])
@@ -97,14 +97,15 @@ def get_tst_logprob(file_name, output_fname, rnn, vocab_dict):
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--name', default='10_checkpoint_simple')
+    parser.add_argument('--name', default='10_checkpoint_stack')
     parser.add_argument('--hidden_size', default=32)
+    parser.add_argument('--num_layers', default=2)
     args = parser.parse_args()
     
-    rnn, vocab_dict = load_model(args.name, int(args.hidden_size))
+    rnn, vocab_dict = load_model(args.name, int(args.hidden_size), int(args.num_layers))
     
-    get_logprob('data/trn-wiki.txt', 'data/trn-logprob.txt', rnn, vocab_dict)
-    get_logprob('data/dev-wiki.txt', 'data/dev-logprob.txt', rnn, vocab_dict)
+    get_logprob('data/trn-wiki.txt', 'data/trn-logprob.txt', rnn, vocab_dict, int(args.num_layers))
+    get_logprob('data/dev-wiki.txt', 'data/dev-logprob.txt', rnn, vocab_dict, int(args.num_layers))
     train_perplexity = compute_perplexity('data/trn-logprob.txt')
     print('Perplexity on training set:',train_perplexity)
     dev_perplexity = compute_perplexity('data/dev-logprob.txt')
