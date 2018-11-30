@@ -100,8 +100,8 @@ def train(input_variables, loss_fun, rnn, rnn_optimizer, clip, mini_batch):
     
     max_len = input_variables.size()[0]
     output, hidden_state = rnn(input_variables[:max_len-1], hidden_state)
-    output_flatten = output.view(max_len*mini_batch, -1)
-    target_flatten = input_variables[1:max_len].view(max_len*mini_batch, -1).squeeze(1)
+    output_flatten = output.view((max_len-1)*mini_batch, output.size()[2])
+    target_flatten = input_variables[1:max_len].view((max_len-1)*mini_batch, 1).squeeze(1)
     loss = loss_fun(output_flatten, target_flatten) 
     printed_loss = loss.item()
     
@@ -158,7 +158,7 @@ def train_iters(iters, vocab_dict, hidden_size, lr, norm_clipping, mini_batch):
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--iters', default=10)
-    parser.add_argument('--mini_batch', default=16)
+    parser.add_argument('--mini_batch', default=64)
     args = parser.parse_args()
     
     vocab_dict = {'<padding>':0, '<unk>':1, '<num>':2, '<start>':3, '<stop>':4}
