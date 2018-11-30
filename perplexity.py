@@ -42,13 +42,16 @@ def get_logprob(file_name, output_fname, rnn, vocab_dict):
     for i in range(len(sents_id)):
         input_variables = get_sent_tensor(sents_id[i])
         # create initial hidden_state
-        hidden_state = (torch.zeros(1, 1, rnn.hidden_size).to(device), 
-                        torch.zeros(1, 1, rnn.hidden_size).to(device))
+        hidden_state = (torch.zeros(2, 1, rnn.hidden_size).to(device), 
+                        torch.zeros(2, 1, rnn.hidden_size).to(device))
         seq_len = input_variables.size()[0]
         output, hidden_state = rnn(input_variables[:seq_len-1], hidden_state)
-        prob = torch.gather(output, 1, input_variables[1:seq_len])
-        prob = prob.cpu().detach().numpy()[:, 0]
-        outs.write('\t'.join(prob)+'\n')
+        probs = torch.gather(output, 1, input_variables[1:seq_len])
+        probs = probs.cpu().detach().numpy()[:, 0]
+        for prob in probs:
+            for num in prob:
+                outs.write(str(num)+'\t')
+            outs.write('\n')
     outs.close()
 
 
@@ -59,7 +62,7 @@ def compute_perplexity(corpus_name):
     n_total = 0.
     p_total = 0.
     for line in lines:
-        tokens = line.strip().split('\t')
+        tokens = line.strip('\t').split('\t')
         n_total += len(tokens)+1
         sent_p = 0.
         for i in range(len(tokens)):
