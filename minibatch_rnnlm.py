@@ -161,7 +161,7 @@ if __name__=='__main__':
     
     vocab_dict = {'<padding>':0, '<unk>':1, '<num>':2, '<start>':3, '<stop>':4}
     hidden_size = 32
-    lr = 0.001
+    lr = 0.1
     norm_clipping = 0.5
     
     trn_words, max_len = load_data('data/trn-wiki.txt')

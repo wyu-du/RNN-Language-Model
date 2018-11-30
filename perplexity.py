@@ -90,7 +90,7 @@ def get_tst_logprob(file_name, output_fname, rnn, vocab_dict):
         prob = torch.gather(output, 1, input_variables[1:seq_len])
         prob = prob.cpu().detach().numpy()[:, 0]
         word_idx = input_variables[1:seq_len].squeeze(1).cpu().numpy()
-        for i in range(len(seq_len)):
+        for i in range(seq_len):
             outs.write(new_dict[word_idx[i]]+'\t'+str(prob[i])+'\n')
     outs.close()
 
