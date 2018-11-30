@@ -100,7 +100,9 @@ def train(input_variables, loss_fun, rnn, rnn_optimizer, clip, mini_batch):
     
     max_len = input_variables.size()[0]
     output, hidden_state = rnn(input_variables[:max_len-1], hidden_state)
-    loss = loss_fun(output, input_variables[1:max_len]) 
+    output_flatten = output.view(max_len*mini_batch, -1)
+    target_flatten = input_variables[1:max_len].view(max_len*mini_batch, -1).squeeze(1)
+    loss = loss_fun(output_flatten, target_flatten) 
     printed_loss = loss.item()
     
     # perform backpropagation
