@@ -108,7 +108,7 @@ def train(input_variables, loss_fun, rnn, rnn_optimizer, clip, num_layers):
     # adjust model weights
     rnn_optimizer.step()
     
-    return printed_loss/seq_len
+    return printed_loss
 
 
 def train_iters(iters, vocab_dict, hidden_size, lr, norm_clipping, num_layers):
