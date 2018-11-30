@@ -8,8 +8,8 @@ Created on Sat Nov 24 10:40:16 2018
 import torch
 from torch import nn
 import os
-import numpy as np
 import argparse
+import numpy as np
 
 
 USE_CUDA = torch.cuda.is_available()
@@ -70,19 +70,18 @@ class SimpleRNN(nn.Module):
         self.lstm = nn.LSTM(hidden_size, hidden_size, num_layers=1, bidirectional=False)
         self.decode = nn.Linear(hidden_size, vocab_size)
         
-    def forward(self, input_token, hidden_state):
+    def forward(self, input_tokens, hidden_state):
         '''
-        input_token: (1, 1)
+        input_token: (seq_len, 1)
         hidden_state: (2, 1, hidden_size)
         '''
-        embedded = self.embedding(input_token)         # (1, hidden_size)
-        embedded = embedded.unsqueeze(0)
+        embedded = self.embedding(input_tokens)      # (seq_len, 1, hidden_size)
         # hidden_state: (2, 1, hidden_size)
-        # output: (1, 1, hidden_size)
+        # output: (seq_len, 1, hidden_size)
         output, hidden = self.lstm(embedded, hidden_state) 
-        out = self.decode(hidden[0])                   # (1, 1, vocab_size)
-        out = out.squeeze(0)
-        out = nn.functional.log_softmax(out, dim=1)    # (1, vocab_size)
+        output = output.squeeze(1)
+        output = self.decode(output)
+        out = nn.functional.log_softmax(output, dim=1)  # (seq_len, vocab_size)
         return out, hidden
 
 
@@ -95,17 +94,10 @@ def train(input_variables, loss_fun, rnn, rnn_optimizer, clip):
     hidden_state = (torch.zeros(1, 1, rnn.hidden_size).to(device),  # h_0
                     torch.zeros(1, 1, rnn.hidden_size).to(device))  # c_0
     
-    loss = 0.
-    printed_loss = []
-    num_tokens = 0.
-    
-    # forward batch of tokens through rnn one time step at a time
-    for t in range(input_variables.size()[0]-1):
-        output, hidden_state = rnn(input_variables[t], hidden_state)
-        token_loss = loss_fun(output, input_variables[t+1]) 
-        loss += token_loss
-        num_tokens += 1
-        printed_loss.append(loss.item())
+    seq_len = input_variables.size()[0]
+    output, hidden_state = rnn(input_variables[:seq_len-1], hidden_state)
+    loss = loss_fun(output, input_variables[1:seq_len].squeeze(1)) 
+    printed_loss = loss.item()
     
     # perform backpropagation
     loss.backward()
@@ -116,12 +108,12 @@ def train(input_variables, loss_fun, rnn, rnn_optimizer, clip):
     # adjust model weights
     rnn_optimizer.step()
     
-    return sum(printed_loss)/num_tokens
+    return printed_loss/seq_len
 
 
 def train_iters(iters, vocab_dict, hidden_size, lr, norm_clipping, optimizer):
     # load data
-    sents_id = get_sent_id('trn-wiki.txt', vocab_dict)
+    sents_id = get_sent_id('data/trn-wiki.txt', vocab_dict)
     
     # build model
     rnn = SimpleRNN(vocab_size=len(vocab_dict.keys()), hidden_size=hidden_size)
@@ -145,37 +137,42 @@ def train_iters(iters, vocab_dict, hidden_size, lr, norm_clipping, optimizer):
     
     # start training
     for k in range(iters):
-        idx = np.random.randint(len(sents_id))
-        input_variables = get_sent_tensor(sents_id[idx])
-        loss = train(input_variables, loss_fun, rnn, rnn_optimizer, norm_clipping)
-        print("Iteration: {}; Average loss: {:.4f}".format(k, loss))
+        avg_loss = 0
+        for i in range(len(sents_id)):
+            idx = np.random.randint(len(sents_id))
+            input_variables = get_sent_tensor(sents_id[idx])
+            loss = train(input_variables, loss_fun, rnn, rnn_optimizer, norm_clipping)
+            avg_loss += loss
         
-    # Save checkpoint
-    directory = 'checkpoints'
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
-    torch.save({
-        'rnn': rnn.state_dict(),
-        'vocab_dict': vocab_dict,
-    }, os.path.join(directory, '{}_{}.tar'.format(iters, 'checkpoint_opt')))
-        
+        # Save checkpoint
+        if (k+1) % 10 == 0:
+            directory = 'checkpoints'
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+    
+            torch.save({
+                'rnn': rnn.state_dict(),
+                'vocab_dict': vocab_dict,
+            }, os.path.join(directory, '{}_{}.tar'.format((k+1), 'checkpoint_opt')))
+    
+        print("Epoch: {}; Average loss: {:.4f}".format(k, avg_loss/len(sents_id)))
     return rnn
 
 
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--iters', default=10000)
+    parser.add_argument('--iters', default=10)
     parser.add_argument('--optimizer', default='SGD')
     args = parser.parse_args()
     
     vocab_dict = {'<unk>':0, '<num>':1, '<start>':2, '<stop>':3}
     hidden_size = 32
     lr = 0.001
-    norm_clipping = 10
+    norm_clipping = 0.5
     
     trn_words, max_len = load_data('data/trn-wiki.txt')
     vocab_dict = build_vocab(trn_words, vocab_dict)
     
     rnn = train_iters(int(args.iters), vocab_dict, hidden_size, lr, norm_clipping, args.optimizer)
+    

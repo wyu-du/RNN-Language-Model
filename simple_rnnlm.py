@@ -9,6 +9,7 @@ import torch
 from torch import nn
 import os
 import argparse
+import numpy as np
 
 
 USE_CUDA = torch.cuda.is_available()
@@ -123,12 +124,13 @@ def train_iters(iters, vocab_dict, hidden_size, lr, norm_clipping):
     rnn_optimizer = torch.optim.SGD(rnn.parameters(), lr=lr)
     # initialize loss function
     loss_fun = nn.NLLLoss()
-    avg_loss = 0
     
     # start training
     for k in range(iters):
+        avg_loss = 0
         for i in range(len(sents_id)):
-            input_variables = get_sent_tensor(sents_id[i])
+            idx = np.random.randint(len(sents_id))
+            input_variables = get_sent_tensor(sents_id[idx])
             loss = train(input_variables, loss_fun, rnn, rnn_optimizer, norm_clipping)
             avg_loss += loss
         
